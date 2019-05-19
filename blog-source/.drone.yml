@@ -1,0 +1,52 @@
+kind: pipeline
+name: xkeditor
+
+steps:
+- name: Deploy
+  image: node
+  environment:
+    WORDPRESS_URL:
+      from_secret: wordpress_url
+    PASSWORD:
+      from_secret: password
+    DEPLOY_URL:
+      from_secret: deploy_url
+    DEPLOY_USER_NAME:
+      from_secret: deploy_user_name
+    DEPLOY_USER_EMAIL:
+      from_secret: deploy_user_email
+    DEPLOY_USER_PASSWORD:
+      from_secret: deploy_user_password
+  commands:
+  - echo "------ Install -----"
+  - npm config set registry https://registry.npm.taobao.org
+  - npm install -g hexo-cli
+  - npm install
+  - echo "------ Download switch.js -----"
+  - wget https://raw.githubusercontent.com/syfxlin/origami-wp-hexo/master/hexo-import/switch.js -O switch.js
+  - echo "------ Move file -----"
+  - mv switch.js node_modules/hexo-migrator-wordpress/index.js
+  - cd themes
+  - git clone https://github.com/SukkaW/hexo-theme-suka.git suka
+  - cd suka
+  - npm install --production
+  - mv ../../theme_config.yml _config.yml
+  - cd ../../
+  - echo "------ Download post xml -----"
+  - wget --post-data="action=origami_export&password=$PASSWORD" $WORDPRESS_URL -O wordpress.xml
+  - echo "------ Hexo migrate -----"
+  - hexo migrate wordpress wordpress.xml
+  - echo "------ Generate -----"
+  - echo $(TZ=Asia/Shanghai date "+%Y-%m-%d %H:%M:%S") > source/last_update.txt
+  - hexo clean
+  - hexo g
+  - echo "------ Deploy -----"
+  - git config --global user.email "$DEPLOY_USER_EMAIL"
+  - git config --global user.name "$DEPLOY_USER_NAME"
+  - git clone https://$DEPLOY_USER_NAME:$DEPLOY_USER_PASSWORD@$DEPLOY_URL .deploy_git
+  - mv .deploy_git/.git public/
+  - cd public
+  # - git init
+  - git add .
+  - git commit -m "Site updated:$(TZ=Asia/Shanghai date "+%Y-%m-%d %H:%M:%S")"
+  - git push "https://$DEPLOY_USER_NAME:$DEPLOY_USER_PASSWORD@$DEPLOY_URL" --force
